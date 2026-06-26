@@ -8,9 +8,9 @@
 <style>
   :root{
     --bg:#0f172a; --card:#1e293b; --ink:#e2e8f0; --muted:#94a3b8;
-    --good:#22c55e; --bad:#ef4444; --track:#334155;
+    --track:#334155; --accent:#38bdf8;
   }
-  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;-webkit-user-select:none;user-select:none}
   html,body{margin:0;height:100%}
   body{
     background:var(--bg);color:var(--ink);
@@ -31,23 +31,24 @@
   .verdict.no{background:linear-gradient(135deg,#7f1d1d,#991b1b);color:#fee2e2}
   .verdict.eq{background:linear-gradient(135deg,#854d0e,#a16207);color:#fef9c3}
   .sliders{display:flex;flex-direction:column;gap:10px;flex:1;justify-content:center}
-  .ctl{background:var(--card);border-radius:14px;padding:11px 14px}
-  .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
-  .row .lbl{font-size:.9rem;color:var(--muted)}
-  .row .val{font-size:1.25rem;font-weight:700;font-variant-numeric:tabular-nums}
-  input[type=range]{
-    -webkit-appearance:none;appearance:none;width:100%;height:30px;
-    background:transparent;margin:0;cursor:pointer;
+
+  /* whole card is the touch surface; vertical position is ignored */
+  .ctl{
+    background:var(--card);border-radius:14px;padding:11px 14px 16px;
+    touch-action:pan-y;cursor:ew-resize;
   }
-  input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:6px;background:var(--track)}
-  input[type=range]::-moz-range-track{height:8px;border-radius:6px;background:var(--track)}
-  input[type=range]::-webkit-slider-thumb{
-    -webkit-appearance:none;appearance:none;width:28px;height:28px;border-radius:50%;
-    background:#f8fafc;border:3px solid #38bdf8;margin-top:-10px;box-shadow:0 1px 4px #0006
+  .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px}
+  .row .lbl{font-size:.9rem;color:var(--muted);pointer-events:none}
+  .row .val{font-size:1.3rem;font-weight:700;font-variant-numeric:tabular-nums;pointer-events:none}
+  .slider{position:relative;height:14px;pointer-events:none}
+  .slider .track{position:absolute;top:3px;left:0;right:0;height:8px;border-radius:6px;background:var(--track)}
+  .slider .fill{position:absolute;top:3px;left:0;height:8px;border-radius:6px;background:var(--accent)}
+  .slider .thumb{
+    position:absolute;top:50%;width:30px;height:30px;border-radius:50%;
+    background:#f8fafc;border:3px solid var(--accent);box-shadow:0 1px 5px #0007;
+    transform:translate(-50%,-50%);
   }
-  input[type=range]::-moz-range-thumb{
-    width:28px;height:28px;border-radius:50%;background:#f8fafc;border:3px solid #38bdf8;box-shadow:0 1px 4px #0006
-  }
+  .ctl.active .thumb{box-shadow:0 0 0 8px #38bdf833,0 1px 5px #0007}
   .stats{display:flex;gap:10px;font-size:.8rem;color:var(--muted)}
   .stats div{flex:1;background:var(--card);border-radius:12px;padding:9px 11px;text-align:center}
   .stats b{display:block;color:var(--ink);font-size:1.1rem;font-variant-numeric:tabular-nums;margin-top:2px}
@@ -60,17 +61,17 @@
   <div id="verdict" class="verdict"><span class="big"></span><span class="sub"></span></div>
 
   <div class="sliders">
-    <div class="ctl">
-      <div class="row"><span class="lbl">🌡️ Temperatura w środku</span><span class="val" id="tinV"></span></div>
-      <input type="range" id="tin" min="22" max="27" step="0.5" value="24">
+    <div class="ctl" data-key="tin" data-min="22" data-max="27" data-step="0.5" data-val="24">
+      <div class="row"><span class="lbl">🌡️ Temperatura w środku</span><span class="val"></span></div>
+      <div class="slider"><div class="track"></div><div class="fill"></div><div class="thumb"></div></div>
     </div>
-    <div class="ctl">
-      <div class="row"><span class="lbl">💧 Wilgotność w środku</span><span class="val" id="rhinV"></span></div>
-      <input type="range" id="rhin" min="40" max="60" step="1" value="55">
+    <div class="ctl" data-key="rhin" data-min="40" data-max="60" data-step="1" data-val="55">
+      <div class="row"><span class="lbl">💧 Wilgotność w środku</span><span class="val"></span></div>
+      <div class="slider"><div class="track"></div><div class="fill"></div><div class="thumb"></div></div>
     </div>
-    <div class="ctl">
-      <div class="row"><span class="lbl">🌫️ Punkt rosy na zewnątrz</span><span class="val" id="tdoutV"></span></div>
-      <input type="range" id="tdout" min="5" max="20" step="0.5" value="17">
+    <div class="ctl" data-key="tdout" data-min="5" data-max="20" data-step="0.5" data-val="17">
+      <div class="row"><span class="lbl">🌫️ Punkt rosy na zewnątrz</span><span class="val"></span></div>
+      <div class="slider"><div class="track"></div><div class="fill"></div><div class="thumb"></div></div>
     </div>
   </div>
 
@@ -85,26 +86,64 @@
 const B=17.62, C=243.12;
 const gamma=(t,rh)=>Math.log(rh/100)+(B*t)/(C+t);
 const dewPoint=(t,rh)=>{const g=gamma(t,rh);return C*g/(B-g);};
-// RH if outside air (given by its dew point) is warmed to indoor temp t
 const rhAfter=(tdOut,tIn)=>100*Math.exp((B*tdOut)/(C+tdOut)-(B*tIn)/(C+tIn));
 
-const $=id=>document.getElementById(id);
-const els={tin:$('tin'),rhin:$('rhin'),tdout:$('tdout')};
+const state={};
+const units={tin:'°C',rhin:'%',tdout:'°C'};
+const dec={tin:1,rhin:0,tdout:1};
+
+document.querySelectorAll('.ctl').forEach(ctl=>{
+  const key=ctl.dataset.key;
+  const min=+ctl.dataset.min, max=+ctl.dataset.max, step=+ctl.dataset.step;
+  state[key]=+ctl.dataset.val;
+  const track=ctl.querySelector('.slider');
+  const fill=ctl.querySelector('.fill');
+  const thumb=ctl.querySelector('.thumb');
+  const valEl=ctl.querySelector('.val');
+
+  function paint(){
+    const pct=(state[key]-min)/(max-min)*100;
+    fill.style.width=pct+'%';
+    thumb.style.left=pct+'%';
+    valEl.textContent=state[key].toFixed(dec[key])+' '+units[key];
+  }
+  // horizontal position only — clientY completely ignored
+  function setFromX(clientX){
+    const r=track.getBoundingClientRect();
+    let f=(clientX-r.left)/r.width;
+    f=Math.max(0,Math.min(1,f));
+    let v=min+f*(max-min);
+    v=Math.round(v/step)*step;
+    v=Math.max(min,Math.min(max,v));
+    if(v!==state[key]){state[key]=v;paint();render();}
+    else{paint();}
+  }
+  ctl.addEventListener('pointerdown',e=>{
+    ctl.setPointerCapture(e.pointerId);
+    ctl.classList.add('active');
+    setFromX(e.clientX);
+  });
+  ctl.addEventListener('pointermove',e=>{
+    if(!ctl.hasPointerCapture(e.pointerId))return;
+    e.preventDefault();
+    setFromX(e.clientX);
+  });
+  const end=e=>{ctl.classList.remove('active');};
+  ctl.addEventListener('pointerup',end);
+  ctl.addEventListener('pointercancel',end);
+
+  ctl._paint=paint;
+});
 
 function render(){
-  const tin=+els.tin.value, rhin=+els.rhin.value, tdout=+els.tdout.value;
-  $('tinV').textContent=tin.toFixed(1)+' °C';
-  $('rhinV').textContent=rhin+' %';
-  $('tdoutV').textContent=tdout.toFixed(1)+' °C';
-
+  const tin=state.tin, rhin=state.rhin, tdout=state.tdout;
   const tdin=dewPoint(tin,rhin);
   $('tdin').textContent=tdin.toFixed(1)+' °C';
-
   const after=Math.min(100,rhAfter(tdout,tin));
   $('rhafter').textContent=after.toFixed(0)+' %';
 
-  const diff=tdin-tdout; // >0 => outside drier => airing helps
-  const v=$('verdict'); const big=v.querySelector('.big'); const sub=v.querySelector('.sub');
+  const diff=tdin-tdout;
+  const v=$('verdict'), big=v.querySelector('.big'), sub=v.querySelector('.sub');
   if(diff>0.3){
     v.className='verdict yes';
     big.textContent='✅ TAK, wietrz';
@@ -119,7 +158,9 @@ function render(){
     sub.textContent='Powietrze w środku i na zewnątrz ma podobną wilgotność absolutną.';
   }
 }
-for(const k in els) els[k].addEventListener('input',render);
+function $(id){return document.getElementById(id);}
+
+document.querySelectorAll('.ctl').forEach(c=>c._paint());
 render();
 </script>
 </body>
