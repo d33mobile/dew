@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<title>Wietrzyć?</title>
+<style>
+  :root{
+    --bg:#0f172a; --card:#1e293b; --ink:#e2e8f0; --muted:#94a3b8;
+    --good:#22c55e; --bad:#ef4444; --track:#334155;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;height:100%}
+  body{
+    background:var(--bg);color:var(--ink);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    display:flex;flex-direction:column;
+    padding:max(10px,env(safe-area-inset-top)) 14px max(10px,env(safe-area-inset-bottom));
+    min-height:100%;gap:10px;
+  }
+  h1{font-size:1.05rem;margin:0;font-weight:600;letter-spacing:.2px}
+  h1 small{color:var(--muted);font-weight:400}
+  .verdict{
+    border-radius:16px;padding:14px 16px;text-align:center;
+    font-weight:700;line-height:1.25;transition:background .2s;
+  }
+  .verdict .big{font-size:1.5rem;display:block}
+  .verdict .sub{font-size:.85rem;font-weight:500;opacity:.92;margin-top:4px}
+  .verdict.yes{background:linear-gradient(135deg,#14532d,#166534);color:#dcfce7}
+  .verdict.no{background:linear-gradient(135deg,#7f1d1d,#991b1b);color:#fee2e2}
+  .verdict.eq{background:linear-gradient(135deg,#854d0e,#a16207);color:#fef9c3}
+  .sliders{display:flex;flex-direction:column;gap:10px;flex:1;justify-content:center}
+  .ctl{background:var(--card);border-radius:14px;padding:11px 14px}
+  .row{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px}
+  .row .lbl{font-size:.9rem;color:var(--muted)}
+  .row .val{font-size:1.25rem;font-weight:700;font-variant-numeric:tabular-nums}
+  input[type=range]{
+    -webkit-appearance:none;appearance:none;width:100%;height:30px;
+    background:transparent;margin:0;cursor:pointer;
+  }
+  input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:6px;background:var(--track)}
+  input[type=range]::-moz-range-track{height:8px;border-radius:6px;background:var(--track)}
+  input[type=range]::-webkit-slider-thumb{
+    -webkit-appearance:none;appearance:none;width:28px;height:28px;border-radius:50%;
+    background:#f8fafc;border:3px solid #38bdf8;margin-top:-10px;box-shadow:0 1px 4px #0006
+  }
+  input[type=range]::-moz-range-thumb{
+    width:28px;height:28px;border-radius:50%;background:#f8fafc;border:3px solid #38bdf8;box-shadow:0 1px 4px #0006
+  }
+  .stats{display:flex;gap:10px;font-size:.8rem;color:var(--muted)}
+  .stats div{flex:1;background:var(--card);border-radius:12px;padding:9px 11px;text-align:center}
+  .stats b{display:block;color:var(--ink);font-size:1.1rem;font-variant-numeric:tabular-nums;margin-top:2px}
+  footer{text-align:center;color:var(--muted);font-size:.7rem}
+</style>
+</head>
+<body>
+  <h1>Wietrzyć? <small>— czy obniżysz wilgotność</small></h1>
+
+  <div id="verdict" class="verdict"><span class="big"></span><span class="sub"></span></div>
+
+  <div class="sliders">
+    <div class="ctl">
+      <div class="row"><span class="lbl">🌡️ Temperatura w środku</span><span class="val" id="tinV"></span></div>
+      <input type="range" id="tin" min="22" max="27" step="0.5" value="24">
+    </div>
+    <div class="ctl">
+      <div class="row"><span class="lbl">💧 Wilgotność w środku</span><span class="val" id="rhinV"></span></div>
+      <input type="range" id="rhin" min="40" max="60" step="1" value="55">
+    </div>
+    <div class="ctl">
+      <div class="row"><span class="lbl">🌫️ Punkt rosy na zewnątrz</span><span class="val" id="tdoutV"></span></div>
+      <input type="range" id="tdout" min="15" max="20" step="0.5" value="17">
+    </div>
+  </div>
+
+  <div class="stats">
+    <div>Punkt rosy w środku<b id="tdin">–</b></div>
+    <div>Wilgotność po wywietrzeniu<b id="rhafter">–</b></div>
+  </div>
+
+  <footer>Punkt rosy ≈ absolutna wilgotność. Wietrzysz „suchsze” powietrze gdy rosa na zewnątrz jest niższa niż w środku.</footer>
+
+<script>
+const B=17.62, C=243.12;
+const gamma=(t,rh)=>Math.log(rh/100)+(B*t)/(C+t);
+const dewPoint=(t,rh)=>{const g=gamma(t,rh);return C*g/(B-g);};
+// RH if outside air (given by its dew point) is warmed to indoor temp t
+const rhAfter=(tdOut,tIn)=>100*Math.exp((B*tdOut)/(C+tdOut)-(B*tIn)/(C+tIn));
+
+const $=id=>document.getElementById(id);
+const els={tin:$('tin'),rhin:$('rhin'),tdout:$('tdout')};
+
+function render(){
+  const tin=+els.tin.value, rhin=+els.rhin.value, tdout=+els.tdout.value;
+  $('tinV').textContent=tin.toFixed(1)+' °C';
+  $('rhinV').textContent=rhin+' %';
+  $('tdoutV').textContent=tdout.toFixed(1)+' °C';
+
+  const tdin=dewPoint(tin,rhin);
+  $('tdin').textContent=tdin.toFixed(1)+' °C';
+
+  const after=Math.min(100,rhAfter(tdout,tin));
+  $('rhafter').textContent=after.toFixed(0)+' %';
+
+  const diff=tdin-tdout; // >0 => outside drier => airing helps
+  const v=$('verdict'); const big=v.querySelector('.big'); const sub=v.querySelector('.sub');
+  if(diff>0.3){
+    v.className='verdict yes';
+    big.textContent='✅ TAK, wietrz';
+    sub.textContent=`Na zewnątrz suchsze o ${diff.toFixed(1)} °C rosy — wilgotność spadnie ~${(rhin-after).toFixed(0)} pkt%.`;
+  }else if(diff<-0.3){
+    v.className='verdict no';
+    big.textContent='⛔ NIE wietrz';
+    sub.textContent=`Na zewnątrz wilgotniej o ${(-diff).toFixed(1)} °C rosy — wpuścisz więcej wody.`;
+  }else{
+    v.className='verdict eq';
+    big.textContent='≈ Bez różnicy';
+    sub.textContent='Powietrze w środku i na zewnątrz ma podobną wilgotność absolutną.';
+  }
+}
+for(const k in els) els[k].addEventListener('input',render);
+render();
+</script>
+</body>
+</html>
